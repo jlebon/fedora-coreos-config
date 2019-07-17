@@ -1,8 +1,9 @@
 [Unit]
 Description=Boot partition
 Documentation=https://github.com/coreos/fedora-coreos-config
-# This prevents the systemd-gpt-auto-generator from generating a mount unit for
-# /boot using the ESP.
+# This prevents the systemd-gpt-auto-generator generated mount unit
+# from starting: https://github.com/systemd/systemd/issues/13099
+Conflicts=boot.automount
 
 [Mount]
 What=/dev/disk/by-label/boot
