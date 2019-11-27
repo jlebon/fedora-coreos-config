@@ -18,6 +18,7 @@ install_ignition_unit() {
 install() {
     inst_multiple \
         realpath \
+        setfiles \
         systemd-sysusers \
         systemd-tmpfiles
 
@@ -36,4 +37,6 @@ install() {
 
     install_ignition_unit ignition-ostree-growfs.service
     inst_script "$moddir/coreos-growpart" /usr/libexec/coreos-growpart
+
+    inst_script "$moddir/coreos-relabel" /usr/bin/coreos-relabel
 }
