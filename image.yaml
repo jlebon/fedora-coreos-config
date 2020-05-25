@@ -2,13 +2,18 @@
 # size is the target disk size in GB.
 size: 8
 
+# For now, we still unconditionally enable initrd networking
+# Pairs with: https://github.com/coreos/coreos-assembler/pull/1373
+firstboot-kargs:
+    - rd.neednet=1
+    - ip=dhcp,dhcp6
+
 extra-kargs:
     # Disable SMT on systems vulnerable to MDS or any similar future issue.
     - mitigations=auto,nosmt
     # https://github.com/coreos/fedora-coreos-tracker/issues/292
     # https://fedoraproject.org/wiki/Changes/CGroupsV2
     - systemd.unified_cgroup_hierarchy=0
-
 
 # Optional remote by which to prefix the deployed OSTree ref
 ostree-remote: fedora
@@ -20,5 +25,3 @@ sysroot-readonly: true
 # After this, we plan to add support for the Ignition
 # storage/filesystems sections.  (Although one can do
 # that on boot as well)
-
-
