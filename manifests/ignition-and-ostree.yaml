@@ -24,6 +24,8 @@ packages:
   - dracut-network
   - clevis
   - clevis-luks
+  - clevis-dracut
+  - clevis-systemd
   - cracklib-dicts
   - jose
   - libjose
