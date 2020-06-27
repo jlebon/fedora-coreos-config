@@ -1,0 +1,15 @@
+[Unit]
+Description=CoreOS Inject Rootmap
+DefaultDependencies=false
+# If root is specified, assume rootmap is already configured
+ConditionKernelCommandLine=!root
+OnFailure=emergency.target
+OnFailureJobMode=isolate
+
+After=initrd-root-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/coreos-inject-rootmap
+RemainAfterExit=yes
+MountFlags=slave

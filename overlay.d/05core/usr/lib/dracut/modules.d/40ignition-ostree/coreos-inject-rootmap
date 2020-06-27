@@ -1,0 +1,75 @@
+#!/bin/bash
+set -euo pipefail
+
+BOOT_DEV="/dev/disk/by-label/boot"
+ROOT_MOUNT="/sysroot"
+
+main() {
+    local root_dev rootfs_uuid rootmap_kargs
+    root_dev=$(get_mount_dev "${ROOT_MOUNT}")
+    rootfs_uuid=$(get_rootfs_uuid "${root_dev}")
+    rootmap_kargs=$(get_rootmap_kargs "${root_dev}")
+    inject_bls_kargs "${rootmap_kargs}" "root=UUID=${rootfs_uuid}" rw
+}
+
+get_mount_dev() {
+    findmnt -nvr -o SOURCE "$1" | tail -n1
+}
+
+get_rootfs_uuid() {
+    local root_dev=$1; shift
+    # shellcheck disable=SC2153
+    (eval "$(blkid -o export "${root_dev}")" && echo "${UUID}")
+}
+
+get_rootmap_kargs() {
+    local root_dev=$1; shift
+    lsblk --pairs -o NAME,TYPE --inverse "${root_dev}" | while IFS= read -r line; do
+        # note this is a pipeline, so we're in a subprocess
+        eval "${line}"
+        # shellcheck disable=SC2153
+        case "${TYPE}" in
+            raid*) get_raid_karg "${NAME}";;
+            crypt) get_luks_karg "${NAME}";;
+            part|disk) ;;
+            *) fatal "unknown block device type ${TYPE}";;
+        esac
+    done
+}
+
+get_raid_karg() {
+    local name=$1; shift
+    local uuid
+    uuid=$(eval "$(mdadm --detail --export "/dev/${name}")" && echo "${MD_UUID}")
+    [ -n "${uuid}" ] || fatal "couldn't find UUID for RAID device ${name}"
+    echo -n " rd.md.uuid=${uuid}"
+}
+
+get_luks_karg() {
+    local name=$1; shift
+    echo -n " rd.luks.uuid=${name}"
+}
+
+inject_bls_kargs() {
+    local tmpf
+
+    # Note we mount /boot but don't unmount since we run with MountFlags=slave
+    mkdir -p /boot
+    mount -o rw ${BOOT_DEV} /boot
+    for f in /boot/loader/entries/*.conf; do
+        tmpf=$(mktemp -p /boot)
+        sed -e "/^options / s|$| $*|" < "${f}" > "${tmpf}"
+        mv "${tmpf}" "${f}"
+    done
+}
+
+err() {
+    echo "$@" >&2
+}
+
+fatal() {
+    err "$@"
+    exit 1
+}
+
+main "$@"
