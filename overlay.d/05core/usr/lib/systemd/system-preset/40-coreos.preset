@@ -15,3 +15,4 @@ enable afterburn-sshkeys@.service
 enable zincati.service
 # Testing aid
 enable coreos-liveiso-success.service
+enable clevis-luks-askpass.path

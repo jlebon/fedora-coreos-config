@@ -24,13 +24,13 @@ get_rootfs_uuid() {
 
 get_rootmap_kargs() {
     local root_dev=$1; shift
-    lsblk --pairs -o NAME,TYPE --inverse "${root_dev}" | while IFS= read -r line; do
+    lsblk --pairs -o NAME,TYPE,UUID --inverse "${root_dev}" | while IFS= read -r line; do
         # note this is a pipeline, so we're in a subprocess
         eval "${line}"
         # shellcheck disable=SC2153
         case "${TYPE}" in
-            raid*) get_raid_karg "${NAME}";;
-            crypt) get_luks_karg "${NAME}";;
+            raid*) get_raid_karg "${NAME}" "${UUID}";;
+            crypt) get_luks_karg "${NAME}" "${UUID}";;
             part|disk) ;;
             *) fatal "unknown block device type ${TYPE}";;
         esac
@@ -39,15 +39,22 @@ get_rootmap_kargs() {
 
 get_raid_karg() {
     local name=$1; shift
-    local uuid
-    uuid=$(eval "$(mdadm --detail --export "/dev/${name}")" && echo "${MD_UUID}")
-    [ -n "${uuid}" ] || fatal "couldn't find UUID for RAID device ${name}"
-    echo -n " rd.md.uuid=${uuid}"
+    local uuid=$1; shift
+    local raid_uuid
+    raid_uuid=$(eval "$(mdadm --detail --export "/dev/disk/by-uuid/${uuid}")" && echo "${MD_UUID}")
+    [ -n "${raid_uuid}" ] || fatal "couldn't find UUID for RAID device ${name}"
+    echo -n " rd.md.uuid=${raid_uuid}"
 }
 
 get_luks_karg() {
     local name=$1; shift
-    echo -n " rd.luks.uuid=${name}"
+    local uuid=$1; shift
+    local dev
+    dev=$(basename "$(readlink "/dev/disk/by-uuid/${uuid}")")
+    parent=$(ls "/sys/block/${dev}/slaves")
+    parent_uuid=$(lsblk --nodeps --noheadings -o UUID "/dev/${parent}")
+    [ -n "${parent_uuid}" ] || fatal "couldn't find UUID for LUKS device ${name}"
+    echo -n " rd.luks.name=${parent_uuid}=${name}"
 }
 
 inject_bls_kargs() {
