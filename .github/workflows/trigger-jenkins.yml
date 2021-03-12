@@ -11,7 +11,7 @@ on:
 jobs:
   trigger-jenkins:
     name: Trigger production Jenkins build
-    if: ${{ github.event.merged == true && !contains(github.event.pull_request.labels.*.name, 'skip-build') }}
+    if: ${{ github.event.pull_request.merged && !contains(github.event.pull_request.labels.*.name, 'skip-build') }}
     runs-on: ubuntu-latest
     steps:
       - name: Trigger build
