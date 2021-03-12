@@ -18,4 +18,4 @@ jobs:
         run: |
           ref=${{ github.base_ref }}
           ref=${ref##*/}
-          curl -sSf "https://jenkins-fedora-coreos.apps.ocp.ci.centos.org/buildByToken/buildWithParameters?job=fedora-coreos/fedora-coreos-fedora-coreos-pipeline&token=${{ secrets.JENKINS_BUILD_TOKEN }}&cause=triggered%20by%20${{ github.event.pull_request.html_url }}&STREAM=${ref}"
+          curl -sSf "https://jenkins-jlebon-fcos-dev.apps.ocp.ci.centos.org/buildByToken/buildWithParameters?job=myfolder/myjob&token=${{ secrets.JENKINS_BUILD_TOKEN }}&cause=triggered%20by%20${{ github.event.pull_request.html_url }}&STREAM=${ref}"
