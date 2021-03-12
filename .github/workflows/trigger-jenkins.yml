@@ -1,0 +1,21 @@
+name: trigger-jenkins
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - stable
+      - testing
+      - next
+
+jobs:
+  trigger-jenkins:
+    name: Trigger production Jenkins build
+    if: ${{ github.event.merged == true && !contains(github.event.pull_request.labels.*.name, 'skip-build') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger build
+        run: |
+          ref=${{ github.base_ref }}
+          ref=${ref##*/}
+          curl -sSf "https://jenkins-fedora-coreos.apps.ocp.ci.centos.org/buildByToken/buildWithParameters?job=fedora-coreos/fedora-coreos-fedora-coreos-pipeline&token=${{ secrets.JENKINS_BUILD_TOKEN }}&cause=triggered%20by%20${{ github.event.pull_request.html_url }}&STREAM=${ref}"
