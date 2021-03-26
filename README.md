@@ -1,5 +1,6 @@
 # Fedora CoreOS Config
 
+
 Base manifest configuration for
 [Fedora CoreOS](https://coreos.fedoraproject.org/).
 
