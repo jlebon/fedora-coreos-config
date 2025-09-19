@@ -65,7 +65,7 @@ jobs:
           fetch-depth: 0
       - name: Check out target stream branch and propagate files
         run: |
-          set -euo pipefail
+          set -xeuo pipefail
 
           # Get the current PR branch files
           pr_ref="${{ github.ref }}"
