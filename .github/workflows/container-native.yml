@@ -93,13 +93,12 @@ jobs:
           echo "Fetching skip-files configuration"
           curl -sL https://raw.githubusercontent.com/coreos/fedora-coreos-releng-automation/refs/heads/main/config-bot/config.toml > config.toml
 
-          # Extract skip-files patterns and apply filters
+          # Extract skip-files patterns using tomllib
           skip_patterns=$(python3 -c "
-          import toml
-          import fnmatch
+          import tomllib
 
-          with open('config.toml', 'r') as f:
-              config = toml.load(f)
+          with open('config.toml', 'rb') as f:
+              config = tomllib.load(f)
 
           skip_files = config.get('propagate-files', {}).get('skip-files', [])
           print('\n'.join(skip_files))
