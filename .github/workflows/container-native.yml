@@ -15,8 +15,9 @@ jobs:
       streams: ${{ steps.get-streams.outputs.streams }}
     steps:
       - name: Get enabled non-production streams
+        id: get-streams
         run: |
-          set -euo pipefail
+          set -xeuo pipefail
           curl -sL https://raw.githubusercontent.com/coreos/fedora-coreos-pipeline/refs/heads/main/config.yaml > config.yaml
 
           # Extract non-production streams that are enabled
@@ -28,19 +29,22 @@ jobs:
           with open('config.yaml', 'r') as f:
               config = yaml.safe_load(f)
 
-          streams = config.get('streams', {})
+          streams_config = config.get('streams', {})
           non_production_streams = []
 
-          for stream_name, stream_config in streams.items():
+          for stream_name, stream_config in streams_config.items():
               # Skip production streams
               if stream_name in ['stable', 'testing', 'next']:
                   continue
 
-              # Include development and mechanical streams
-              if stream_config.get('type') in ['development', 'mechanical']:
+              # Include development and mechanical streams that are enabled
+              stream_type = stream_config.get('type', '')
+              if stream_type in ['development', 'mechanical']:
                   non_production_streams.append(stream_name)
 
-          print(json.dumps(non_production_streams))
+          # Ensure we always output a valid JSON array, even if empty
+          result = json.dumps(non_production_streams) if non_production_streams else '[]'
+          print(result)
           ")
 
           echo "streams=$streams" >> $GITHUB_OUTPUT
@@ -50,6 +54,7 @@ jobs:
     name: Podman Build
     runs-on: ubuntu-latest
     needs: query_streams
+    if: ${{ needs.query_streams.outputs.streams != '[]' }}
     strategy:
       matrix:
         stream: ${{ fromJson(needs.query_streams.outputs.streams) }}
