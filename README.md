@@ -1,5 +1,7 @@
 # Fedora CoreOS Config
 
+BLAH
+
 [![next-devel status](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/coreos/fedora-coreos-pipeline/main/next-devel/badge.json)](https://github.com/coreos/fedora-coreos-pipeline/blob/main/next-devel/README.md)
 
 Base manifest configuration for
