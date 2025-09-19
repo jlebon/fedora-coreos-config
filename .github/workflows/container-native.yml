@@ -8,12 +8,144 @@ permissions:
   contents: read
 
 jobs:
+  query_streams:
+    name: Query enabled streams
+    runs-on: ubuntu-latest
+    outputs:
+      streams: ${{ steps.get-streams.outputs.streams }}
+    steps:
+      - name: Get enabled non-production streams
+        id: get-streams
+        run: |
+          set -xeuo pipefail
+          curl -sL https://raw.githubusercontent.com/coreos/fedora-coreos-pipeline/refs/heads/main/config.yaml > config.yaml
+
+          # Extract non-production streams that are enabled
+          # We're looking for development streams and mechanical streams, excluding production streams
+          streams=$(python3 -c "
+          import yaml
+          import json
+
+          with open('config.yaml', 'r') as f:
+              config = yaml.safe_load(f)
+
+          streams_config = config.get('streams', {})
+          non_production_streams = []
+
+          for stream_name, stream_config in streams_config.items():
+              # Skip production streams
+              if stream_name in ['stable', 'testing', 'next']:
+                  continue
+
+              # Include development and mechanical streams that are enabled
+              stream_type = stream_config.get('type', '')
+              if stream_type in ['development', 'mechanical']:
+                  non_production_streams.append(stream_name)
+
+          # Ensure we always output a valid JSON array, even if empty
+          result = json.dumps(non_production_streams) if non_production_streams else '[]'
+          print(result)
+          ")
+
+          echo "streams=$streams" >> $GITHUB_OUTPUT
+          echo "Detected non-production streams: $streams"
+
   podman_build:
     name: Podman Build
     runs-on: ubuntu-latest
+    needs: query_streams
+    if: ${{ needs.query_streams.outputs.streams != '[]' }}
+    strategy:
+      matrix:
+        stream: ${{ fromJson(needs.query_streams.outputs.streams) }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check out target stream branch and propagate files
+        run: |
+          set -xeuo pipefail
+
+          # Get the current PR branch files
+          pr_ref="${{ github.ref }}"
+          target_stream="${{ matrix.stream }}"
+
+          echo "Processing stream: $target_stream"
+          echo "PR ref: $pr_ref"
+
+          # Check if target stream branch exists
+          if git show-ref --verify --quiet "refs/remotes/origin/$target_stream"; then
+            echo "Target stream branch $target_stream exists"
+            git checkout "origin/$target_stream"
+          else
+            echo "Target stream branch $target_stream does not exist, using current branch"
+          fi
+
+          # Get list of changed files in the PR
+          git checkout "${{ github.head_ref }}"
+          changed_files=$(git diff --name-only "origin/${{ github.base_ref }}"..."${{ github.head_ref }}")
+
+          echo "Changed files in PR:"
+          echo "$changed_files"
+
+          # Get skip-files configuration from config-bot
+          echo "Fetching skip-files configuration"
+          curl -sL https://raw.githubusercontent.com/coreos/fedora-coreos-releng-automation/refs/heads/main/config-bot/config.toml > config.toml
+
+          # Extract skip-files patterns using tomllib
+          skip_patterns=$(python3 -c "
+          import tomllib
+
+          with open('config.toml', 'rb') as f:
+              config = tomllib.load(f)
+
+          skip_files = config.get('propagate-files', {}).get('skip-files', [])
+          print('\n'.join(skip_files))
+          ")
+
+          echo "Skip patterns:"
+          echo "$skip_patterns"
+
+          # Filter out files that should be skipped
+          files_to_propagate=""
+          while IFS= read -r file; do
+            if [[ -n "$file" ]]; then
+              should_skip=false
+              while IFS= read -r pattern; do
+                if [[ -n "$pattern" ]] && [[ "$file" == $pattern ]]; then
+                  echo "Skipping file $file (matches pattern: $pattern)"
+                  should_skip=true
+                  break
+                fi
+              done <<< "$skip_patterns"
+
+              if [[ "$should_skip" == "false" ]]; then
+                files_to_propagate="$files_to_propagate $file"
+              fi
+            fi
+          done <<< "$changed_files"
+
+          echo "Files to propagate: $files_to_propagate"
+
+          # If we have a different target stream, propagate the filtered files
+          if git show-ref --verify --quiet "refs/remotes/origin/$target_stream" && [[ -n "$files_to_propagate" ]]; then
+            echo "Propagating files to target stream $target_stream"
+            git checkout "origin/$target_stream"
+
+            # Copy the changed files from the PR branch
+            for file in $files_to_propagate; do
+              if [[ -f "$file" ]]; then
+                git checkout "${{ github.head_ref }}" -- "$file" || echo "Could not checkout $file"
+              fi
+            done
+
+            # Set git config for potential commits (though we won't commit in CI)
+            git config user.name "GitHub Actions"
+            git config user.email "actions@github.com"
+          else
+            echo "No propagation needed or no files to propagate"
+          fi
       # cargo-culted from rpm-ostree CI
       # https://github.com/containers/podman/discussions/17362
       - name: Get newer podman
@@ -55,6 +187,10 @@ jobs:
           if [[ -f local-overrides.repo ]]; then
             SECRETS+=(--secret id=yumrepos,src=local-overrides.repo)
           fi
-          podman build "${SECRETS[@]}" --security-opt=label=disable --cap-add=all --device /dev/fuse --build-arg-file build-args.conf  -v $PWD:/run/src . -t localhost/fedora-coreos
+          # Include stream name in the tag to differentiate builds
+          stream_tag="localhost/fedora-coreos:${{ matrix.stream }}"
+          podman build "${SECRETS[@]}" --security-opt=label=disable --cap-add=all --device /dev/fuse --build-arg-file build-args.conf  -v $PWD:/run/src . -t "$stream_tag"
       - name: Sanity-check
-        run: podman run --rm localhost/fedora-coreos echo hello
+        run: |
+          stream_tag="localhost/fedora-coreos:${{ matrix.stream }}"
+          podman run --rm "$stream_tag" echo hello
